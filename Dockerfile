@@ -1,17 +1,15 @@
-# Use an official Python runtime as a parent image
+# Use Python 3.11 as the base
 FROM python:3.11-slim
 
-# Set the working directory in the container
+# Create a folder for the bot
 WORKDIR /app
 
-# Copy the requirements file into the container
+# Install dependencies first (faster builds)
 COPY requirements.txt .
-
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the code
+# Copy all code into the folder
 COPY . .
 
-# Run the bot
-CMD ["python", "bot.py"]
+# Tell Koyeb how to start it
+CMD ["python", "main.py"]
