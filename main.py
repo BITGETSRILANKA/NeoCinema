@@ -1,58 +1,87 @@
+import os
+import json
+import re
 import telebot
 import firebase_admin
 from firebase_admin import credentials, db
-import re
 
-# --- CONFIG ---
-BOT_TOKEN = "8513298523:AAEx9spShVRX3N_qpynoQU99zkmlAYE8nGg"
-BOT_USERNAME = "Teledrivelk_bot" # Without the @
+# --- 1. CONFIGURATION ---
+# (On Koyeb, set these in Environment Variables)
+BOT_TOKEN = os.environ.get('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')
+CHANNEL_ID = int(os.environ.get('CHANNEL_ID', -1001234567890))
 FIREBASE_URL = "https://neocinema-6809b-default-rtdb.firebaseio.com/"
-CHANNEL_ID = -1003675498085 # Your private storage channel
 
-# --- INIT ---
-cred = credentials.Certificate("secret.json")
-firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_URL})
-bot = telebot.TeleBot(BOT_TOKEN)
-ref = db.reference('catalog')
-
-# 1. ADMIN MODE: This watches the CHANNEL
-@bot.channel_post_handler(content_types=['video', 'document'])
-def index_from_channel(message):
-    file = message.video if message.video else message.document
-    raw_name = getattr(file, 'file_name', "Unknown Movie")
+# --- 2. FIREBASE INITIALIZATION ---
+def init_firebase():
+    config_env = os.environ.get('FIREBASE_CONFIG_JSON')
+    if config_env:
+        # For Koyeb/Production
+        cred_dict = json.loads(config_env)
+        cred = credentials.Certificate(cred_dict)
+    else:
+        # For Local testing
+        cred = credentials.Certificate("secret.json")
     
-    # Clean name for TMDB AI
-    clean_name = raw_name.split('.')[0].replace('_', ' ').replace('.', ' ')
-    clean_name = re.sub(r'(720p|1080p|480p|4k|HDR|WEB|BluRay).*', '', clean_name, flags=re.IGNORECASE).strip()
+    firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_URL})
 
-    # Calculate Size
+init_firebase()
+bot = telebot.TeleBot(BOT_TOKEN)
+firebase_ref = db.reference('catalog')
+
+# --- 3. HELPER: CLEAN FILENAMES FOR TMDB AI ---
+def clean_movie_title(raw_name):
+    # Removes extensions (.mp4, .mkv)
+    name = re.sub(r'\.(mp4|mkv|avi|mov)$', '', raw_name, flags=re.IGNORECASE)
+    # Replaces dots and underscores with spaces
+    name = name.replace('.', ' ').replace('_', ' ')
+    # Removes quality tags so TMDB can find it (1080p, HDR, etc)
+    name = re.sub(r'(720p|1080p|2160p|4k|HDR|WEB-DL|BluRay|PSA|YTS|WEBRip).*', '', name, flags=re.IGNORECASE)
+    return name.strip()
+
+# --- 4. CHANNEL HANDLER (Indexing Mode) ---
+@bot.channel_post_handler(content_types=['video', 'document'])
+def index_channel_file(message):
+    file = message.video if message.video else message.document
+    
+    # Extract Data
+    raw_name = getattr(file, 'file_name', 'Unknown_Movie')
+    pure_title = clean_movie_title(raw_name)
+    
+    # Calculate Size (MB or GB)
     size_mb = round(file.file_size / (1024 * 1024), 2)
-    size_str = f"{size_mb} MB" if size_mb < 1000 else f"{round(size_mb/1024, 2)} GB"
+    final_size = f"{size_mb} MB" if size_mb < 1000 else f"{round(size_mb/1024, 2)} GB"
 
-    movie_data = {
-        "title": clean_name,
-        "size": size_str,
-        "quality": "HD/1080p",
-        "file_id": file.file_id,
-        "message_id": message.message_id # This is the unique key
+    # Push to Firebase 'catalog' node
+    movie_entry = {
+        "title": pure_title,
+        "size": final_size,
+        "quality": "HD High-Speed",
+        "message_id": message.message_id # This connects the App click to this specific post
     }
     
-    # Store in Firebase
-    ref.push().set(movie_data)
-    print(f"🚀 Indexed: {clean_name}")
+    firebase_ref.push().set(movie_entry)
+    print(f"✅ Indexed in Firebase: {pure_title} ({final_size})")
 
-# 2. USER MODE: When user clicks the link in your Android App
+# --- 5. PRIVATE BOT HANDLER (Delivery Mode) ---
 @bot.message_handler(commands=['start'])
-def send_file_to_user(message):
-    if len(message.text.split()) > 1:
-        msg_id = message.text.split()[1] # Gets the ID from the ?start=... link
+def handle_app_click(message):
+    # This triggers when app opens link like t.me/bot?start=123
+    text_parts = message.text.split()
+    
+    if len(text_parts) > 1:
+        msg_id_from_app = text_parts[1]
         try:
-            # The bot forwards the file from the hidden channel to the user
-            bot.copy_message(message.chat.id, CHANNEL_ID, int(msg_id))
-        except Exception:
-            bot.reply_to(message, "❌ File not found in my database.")
+            # Forwards the movie from the hidden channel directly to the user
+            bot.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=CHANNEL_ID,
+                message_id=int(msg_id_from_app)
+            )
+        except Exception as e:
+            bot.reply_to(message, f"❌ Link expired or File moved. Error: {str(e)}")
     else:
-        bot.reply_to(message, "Welcome! Please use our App to browse movies.")
+        bot.reply_to(message, "📽️ Welcome to NeoCinema Cloud. Please use our Android App to request movies!")
 
-print("🤖 Movie Bot is running...")
-bot.polling()
+# --- START ---
+print("🚀 NeoCinema Indexer & Delivery Bot is Active...")
+bot.infinity_polling()
