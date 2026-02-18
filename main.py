@@ -4,10 +4,10 @@ from firebase_admin import credentials, db
 import re
 
 # --- CONFIG ---
-BOT_TOKEN = "PASTE_YOUR_BOT_TOKEN"
-BOT_USERNAME = "YourBotUsername" # Without the @
+BOT_TOKEN = "8513298523:AAEx9spShVRX3N_qpynoQU99zkmlAYE8nGg"
+BOT_USERNAME = "Teledrivelk_bot" # Without the @
 FIREBASE_URL = "https://neocinema-6809b-default-rtdb.firebaseio.com/"
-CHANNEL_ID = -1001234567890 # Your private storage channel
+CHANNEL_ID = -1003675498085 # Your private storage channel
 
 # --- INIT ---
 cred = credentials.Certificate("secret.json")
