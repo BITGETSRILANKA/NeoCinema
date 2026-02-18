@@ -7,8 +7,8 @@ from firebase_admin import credentials, db
 
 # --- 1. CONFIGURATION ---
 # (On Koyeb, set these in Environment Variables)
-BOT_TOKEN = os.environ.get('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')
-CHANNEL_ID = int(os.environ.get('CHANNEL_ID', -1001234567890))
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '8513298523:AAEx9spShVRX3N_qpynoQU99zkmlAYE8nGg')
+CHANNEL_ID = int(os.environ.get('CHANNEL_ID', -1003675498085))
 FIREBASE_URL = "https://neocinema-6809b-default-rtdb.firebaseio.com/"
 
 # --- 2. FIREBASE INITIALIZATION ---
